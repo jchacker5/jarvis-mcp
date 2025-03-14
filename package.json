@@ -1,18 +1,21 @@
 {
-  "name": "cursor-sound-mcp",
+  "name": "jarvis-mcp",
   "version": "1.0.0",
-  "description": "MCP for Cursor that plays sounds after code generation",
+  "description": "MCP for Cursor that speaks with Jarvis voice after task completion",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsc -w"
+    "dev": "tsc -w",
+    "download-model": "huggingface-cli download sesame/csm-1b --local-dir ./models --include ckpt.pt"
   },
   "keywords": [
     "mcp",
     "cursor",
-    "sound"
+    "jarvis",
+    "voice",
+    "csm"
   ],
   "author": "",
   "license": "ISC",
