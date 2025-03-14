@@ -52,3 +52,39 @@ local
 
 # vercel
 .vercel
+
+# Node.js dependencies
+node_modules/
+
+# Python virtual environment
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Model files (large binary files)
+csm/ckpt.pt
+
+# Temporary files
+*.wav
+*.mp3
+*.temp
+*.tmp
+
+# Environment files
+.env
+.env.local
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS specific files
+.DS_Store
+Thumbs.db
