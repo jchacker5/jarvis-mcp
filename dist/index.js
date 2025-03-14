@@ -2,61 +2,58 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { exec } from "child_process";
 import fs from "fs";
-import os from "os";
 import path from "path";
-import player from "play-sound";
 import { fileURLToPath } from "url";
 import { z } from "zod";
 // Get the directory name in ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const audioPlayer = player();
-const TEMP_DIR = path.join(os.tmpdir(), "jarvis-mcp");
-// Create temp directory if it doesn't exist
-if (!fs.existsSync(TEMP_DIR)) {
-    fs.mkdirSync(TEMP_DIR, { recursive: true });
+// Configuration
+const AUDIO_DIR = path.join(path.dirname(__dirname), "audio");
+const VOICE_GENERATOR_PATH = path.join(path.dirname(__dirname), "src", "mlx_voice_generator.py");
+// Ensure audio directory exists
+if (!fs.existsSync(AUDIO_DIR)) {
+    fs.mkdirSync(AUDIO_DIR, { recursive: true });
 }
-// Generate a unique filename for the audio
+/**
+ * Generate a unique filename for the audio file
+ * @returns {string} Path to the audio file
+ */
 function getAudioFilePath() {
     const timestamp = Date.now();
-    return path.join(TEMP_DIR, `jarvis-${timestamp}.wav`);
+    return path.join(AUDIO_DIR, `jarvis_${timestamp}.wav`);
 }
-// Generate and play audio using the CSM model
-async function generateAndPlayAudio(text) {
+/**
+ * Generate audio using the MLX voice generator
+ * @param {string} text - Text to convert to speech
+ * @param {string} voice - Voice style to use
+ * @param {number} speed - Speech speed multiplier
+ * @returns {Promise<string>} Path to the generated audio file
+ */
+async function generateAudio(text, voice = "af_heart", speed = 1.0) {
     return new Promise((resolve, reject) => {
-        // Add a timeout to prevent hanging
-        const timeout = setTimeout(() => {
-            console.error("Audio generation timed out after 60 seconds");
-            reject(new Error("Audio generation timed out"));
-        }, 60000); // 60 second timeout (increased from 30)
         const outputPath = getAudioFilePath();
-        const scriptPath = path.join(path.dirname(__dirname), "src", "voice_generator.py");
         console.log(`Generating audio for: "${text}"`);
-        console.log(`Using script path: ${scriptPath}`);
-        console.log(`Output path: ${outputPath}`);
-        // Execute the Python script with virtual environment
-        // Use absolute paths to ensure it works in any environment
+        console.log(`Using voice: ${voice}, speed: ${speed}`);
+        // Activate virtual environment and run Python script
         const venvPath = path.join(process.cwd(), ".venv");
         const activateCmd = process.platform === "win32"
             ? `"${path.join(venvPath, "Scripts", "activate")}"`
             : `source "${path.join(venvPath, "bin", "activate")}"`;
-        // Enable MPS acceleration with fallback for operations not supported on MPS
-        const command = `PYTORCH_ENABLE_MPS_FALLBACK=1 ${activateCmd} && python "${scriptPath}" --text "${text}" --output "${outputPath}"`;
-        console.log(`Executing command: ${command}`);
+        // Command to generate audio
+        const command = `${activateCmd} && python "${VOICE_GENERATOR_PATH}" --text "${text}" --output "${outputPath}" --voice "${voice}" --speed ${speed}`;
         exec(command, (error, stdout, stderr) => {
-            // Clear the timeout since the command has completed
-            clearTimeout(timeout);
             if (error) {
-                console.error("Error generating audio:", error);
-                console.error("stderr:", stderr);
-                reject(new Error(`Failed to generate audio: ${error.message}`));
+                console.error("[Voice Generator Error]", stderr);
+                console.error(`Failed to generate audio. Exit code: ${error.code}`);
+                console.error(`Stdout: ${stdout}`);
+                console.error(`Stderr: ${stderr}`);
+                reject(new Error(`Failed to generate audio. Exit code: ${error.code}`));
                 return;
             }
-            console.log("Python script output:", stdout);
-            if (stdout.includes("Error generating audio") ||
-                stdout.includes("Error:")) {
-                console.error("Error detected in Python script output:", stdout);
-                reject(new Error(`Error in Python script: ${stdout}`));
+            if (stdout.includes("Error")) {
+                console.error("[Voice Generator Error]", stdout);
+                reject(new Error(`Error in voice generator: ${stdout}`));
                 return;
             }
             if (!fs.existsSync(outputPath)) {
@@ -64,110 +61,60 @@ async function generateAndPlayAudio(text) {
                 reject(new Error("Audio file was not created"));
                 return;
             }
-            // Try different methods to play audio based on platform
-            console.log(`Playing audio file: ${outputPath}`);
-            try {
-                // First try using play-sound
-                audioPlayer.play(outputPath, (err) => {
-                    if (err) {
-                        console.error("Error playing audio with play-sound:", err);
-                        // Try platform-specific commands as fallback
-                        let playCmd = "";
-                        if (process.platform === "darwin") {
-                            playCmd = `afplay "${outputPath}"`;
-                        }
-                        else if (process.platform === "win32") {
-                            playCmd = `powershell -c (New-Object Media.SoundPlayer "${outputPath}").PlaySync()`;
-                        }
-                        else if (process.platform === "linux") {
-                            playCmd = `aplay "${outputPath}"`;
-                        }
-                        if (playCmd) {
-                            console.log(`Trying fallback command: ${playCmd}`);
-                            exec(playCmd, (playError, playStdout, playStderr) => {
-                                if (playError) {
-                                    console.error("Error playing audio with fallback command:", playError);
-                                    console.error("stderr:", playStderr);
-                                    // Even if audio playback fails, consider it a success
-                                    // This allows the MCP to work even if audio can't be played
-                                    console.log("Audio playback failed, but continuing anyway");
-                                    // Clean up the temporary file
-                                    fs.unlink(outputPath, (unlinkErr) => {
-                                        if (unlinkErr) {
-                                            console.warn("Failed to delete temporary audio file:", unlinkErr);
-                                        }
-                                        else {
-                                            console.log("Temporary audio file deleted");
-                                        }
-                                    });
-                                    resolve();
-                                }
-                                else {
-                                    console.log("Audio played successfully with fallback command");
-                                    // Clean up the temporary file
-                                    fs.unlink(outputPath, (unlinkErr) => {
-                                        if (unlinkErr) {
-                                            console.warn("Failed to delete temporary audio file:", unlinkErr);
-                                        }
-                                        else {
-                                            console.log("Temporary audio file deleted");
-                                        }
-                                    });
-                                    resolve();
-                                }
-                            });
-                        }
-                        else {
-                            // No fallback available, but continue anyway
-                            console.log("No fallback audio playback available, continuing anyway");
-                            // Clean up the temporary file
-                            fs.unlink(outputPath, (unlinkErr) => {
-                                if (unlinkErr) {
-                                    console.warn("Failed to delete temporary audio file:", unlinkErr);
-                                }
-                                else {
-                                    console.log("Temporary audio file deleted");
-                                }
-                            });
-                            resolve();
-                        }
-                    }
-                    else {
-                        console.log("Audio played successfully with play-sound");
-                        // Clean up the temporary file
-                        fs.unlink(outputPath, (unlinkErr) => {
-                            if (unlinkErr) {
-                                console.warn("Failed to delete temporary audio file:", unlinkErr);
-                            }
-                            else {
-                                console.log("Temporary audio file deleted");
-                            }
-                        });
-                        resolve();
-                    }
-                });
-            }
-            catch (playError) {
-                console.error("Exception during audio playback:", playError);
-                // Even if audio playback fails, consider it a success
-                // This allows the MCP to work even if audio can't be played
-                console.log("Audio playback failed, but continuing anyway");
-                // Clean up the temporary file
-                fs.unlink(outputPath, (unlinkErr) => {
-                    if (unlinkErr) {
-                        console.warn("Failed to delete temporary audio file:", unlinkErr);
-                    }
-                    else {
-                        console.log("Temporary audio file deleted");
-                    }
-                });
-                resolve();
-            }
+            console.log(`Audio generated successfully: ${outputPath}`);
+            resolve(outputPath);
         });
     });
 }
+/**
+ * Play the generated audio file
+ * @param {string} audioPath - Path to the audio file
+ * @returns {Promise<void>}
+ */
+async function playAudio(audioPath) {
+    return new Promise((resolve, reject) => {
+        console.log(`Playing audio: ${audioPath}`);
+        let playCommand = "";
+        if (process.platform === "darwin") {
+            playCommand = `afplay "${audioPath}"`;
+        }
+        else if (process.platform === "win32") {
+            playCommand = `powershell -c (New-Object Media.SoundPlayer "${audioPath}").PlaySync()`;
+        }
+        else if (process.platform === "linux") {
+            playCommand = `aplay "${audioPath}"`;
+        }
+        else {
+            console.warn("Unsupported platform for audio playback");
+            resolve();
+            return;
+        }
+        exec(playCommand, (error) => {
+            if (error) {
+                console.error("Error playing audio:", error);
+                reject(error);
+                return;
+            }
+            console.log("Audio playback complete");
+            resolve();
+        });
+    });
+}
+/**
+ * Clean up the audio file after playback
+ * @param {string} audioPath - Path to the audio file
+ */
+function cleanupAudio(audioPath) {
+    try {
+        fs.unlinkSync(audioPath);
+        console.log(`Cleaned up audio file: ${audioPath}`);
+    }
+    catch (error) {
+        console.error("Error cleaning up audio file:", error);
+    }
+}
 async function main() {
-    console.log("Starting Jarvis MCP server...");
+    console.log("Starting Jarvis MCP server with MLX-Audio...");
     console.log(`Current working directory: ${process.cwd()}`);
     console.log(`Node.js version: ${process.version}`);
     console.log(`Platform: ${process.platform}`);
@@ -179,16 +126,33 @@ async function main() {
     server.tool("speakJarvis", {
         task: z.string().optional(),
         customMessage: z.string().optional(),
-    }, async ({ task, customMessage }) => {
-        console.log("speakJarvis tool called with:", { task, customMessage });
+        voice: z.string().optional(),
+        speed: z.number().optional(),
+    }, async ({ task, customMessage, voice, speed }) => {
+        console.log("speakJarvis tool called with:", {
+            task,
+            customMessage,
+            voice,
+            speed,
+        });
         const defaultMessage = `I have completed${task ? ` ${task}` : ""} sir, is there anything else you'd like me to do.`;
         const message = customMessage || defaultMessage;
         try {
-            console.log("Starting audio generation for:", message);
-            await generateAndPlayAudio(message);
-            console.log("Audio generation and playback completed");
+            console.log("Starting MLX audio generation for:", message);
+            // Generate audio directly (no need to forward to another server)
+            const audioPath = await generateAudio(message, voice || "af_heart", speed || 1.0);
+            // Play the audio
+            await playAudio(audioPath);
+            // Clean up the audio file
+            cleanupAudio(audioPath);
+            console.log("MLX audio generation and playback completed");
             return {
-                content: [{ type: "text", text: `Jarvis said: "${message}"` }],
+                content: [
+                    {
+                        type: "text",
+                        text: `Jarvis said: "${message}" (Audio played successfully)`,
+                    },
+                ],
             };
         }
         catch (error) {
@@ -211,7 +175,7 @@ async function main() {
     // Start the server using stdio transport
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    console.log("Jarvis MCP server started...");
+    console.log("Jarvis MCP server started with integrated MLX-Audio support...");
 }
 main().catch((error) => {
     console.error("Failed to start MCP server:", error);
