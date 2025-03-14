@@ -1,132 +1,108 @@
-# Jarvis MCP for Cursor
+# Jarvis MLX-Audio MCP
 
-A Model Context Protocol (MCP) for Cursor that speaks with a Jarvis-like voice after task completion.
+A high-quality voice generation system for Jarvis using MLX-Audio, optimized for Apple Silicon. This implementation uses the Model Context Protocol (MCP) to provide a standardized interface for AI assistants to generate speech.
 
 ## Features
 
-- Integrates with Cursor IDE through the MCP protocol
-- Uses the CSM-1B voice model from Sesame AI Labs to generate Jarvis-like voice responses
-- Speaks aloud when tasks are completed with the phrase: "I have completed [task] sir, is there anything else you'd like me to do."
-- Utilizes MPS (Metal Performance Shaders) acceleration on Apple Silicon Macs for up to 2x faster voice generation
+- High-quality speech synthesis using MLX and the Kokoro TTS model
+- Optimized for Apple Silicon (M1/M2/M3)
+- Simple MCP server integration with one-command startup
+- Multiple voice options
+- Speed adjustment
+- Minimal dependencies
 
 ## Prerequisites
 
-- Node.js (v18 or later)
-- Python 3.10 or later
-- Cursor IDE
-- For optimal performance on Mac: Apple Silicon hardware (M1/M2/M3)
+- macOS with Apple Silicon (M1/M2/M3)
+- Node.js v16 or higher
+- Python 3.9 or higher
 
 ## Installation
 
 1. Clone this repository:
 
-   ```bash
-   git clone https://github.com/yourusername/jarvis-mcp.git
-   cd jarvis-mcp
+   ```
+   git clone https://github.com/yourusername/jarvis-mlx-audio-mcp.git
+   cd jarvis-mlx-audio-mcp
    ```
 
-2. Install Node.js dependencies:
-
-   ```bash
-   npm install
+2. Run the setup script:
+   ```
+   ./setup.sh
    ```
 
-3. Set up the Python environment for the CSM voice model:
+The setup script will:
 
-   ```bash
-   python3.10 -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   pip install -r csm/requirements.txt
-   ```
-
-4. Download the CSM-1B model checkpoint:
-
-   ```bash
-   pip install huggingface_hub
-   python -c "from huggingface_hub import hf_hub_download; hf_hub_download('sesame/csm-1b', 'ckpt.pt', local_dir='csm')"
-   ```
-
-5. Build the TypeScript code:
-   ```bash
-   npm run build
-   ```
+- Install Node.js dependencies
+- Create a Python virtual environment
+- Install MLX-Audio and its dependencies
+- Build the TypeScript code
+- Create the necessary directories
+- Make scripts executable
 
 ## Usage
 
-1. Start the Jarvis MCP server:
+### Starting the MCP Server
 
-   ```bash
-   npm start
-   ```
+Start the MCP server with:
 
-2. In Cursor, add the MCP to your configuration:
-
-   - Open Cursor settings
-   - Navigate to the MCPs section
-   - Add a new MCP with the command: `node /path/to/jarvis-mcp/dist/index.js`
-
-3. Add the following to your Cursor prompt rules:
-   ```
-   When a task is completed, use the speakJarvis tool with the task name to have Jarvis announce completion.
-   ```
-
-## API
-
-The Jarvis MCP provides the following tool:
-
-### `speakJarvis`
-
-Generates and plays a Jarvis-like voice response.
-
-Parameters:
-
-- `task` (optional): The name of the completed task
-- `customMessage` (optional): A custom message to speak instead of the default
-
-Example:
-
-```javascript
-// In Cursor's AI response
-speakJarvis({ task: "creating the React component" });
 ```
+./start-mlx.sh
+```
+
+The server will run in the foreground and output logs to the console.
+
+### Testing the Voice Generator
+
+You can test the voice generator directly with:
+
+```
+./test-mlx-audio.sh --message "Hello, I am Jarvis, your AI assistant."
+```
+
+Options:
+
+- `--message`: The text to convert to speech
+- `--voice`: Voice style to use (default: af_heart)
+- `--speed`: Speed multiplier (default: 1.0)
+- `--output`: Output file path (default: test_mlx.wav)
+- `--debug`: Enable debug mode with verbose logging
+
+Available voices:
+
+- `af_heart`: American female voice with a warm tone (default)
+- `af_nova`: American female voice with a modern tone
+- `af_bella`: American female voice with a soft tone
+- `bf_emma`: British female voice
+
+### Using with Claude
+
+To use this MCP server with Claude:
+
+1. Start the MCP server as described above
+2. In your Cursor IDE, connect to the MCP server
+3. Use the `speakJarvis` tool in Claude's custom instructions
+
+Example custom instruction:
+
+```
+When a task is completed, use the speakJarvis tool with the task name to have Jarvis announce completion.
+```
+
+## Technical Details
+
+This implementation uses:
+
+- MLX-Audio for high-quality voice generation
+- TypeScript for the MCP server
+- Model Context Protocol (MCP) for standardized AI tool integration
 
 ## Troubleshooting
 
-- **Audio not playing**: Make sure your system's audio is working and not muted
-- **Python errors**: Verify that you have the correct Python version (3.10) and all dependencies installed
-- **Model not found**: Ensure you've downloaded the model checkpoint to the correct location
+- If you encounter any issues with audio generation, try running the test script with `--debug` to get more detailed output
+- Ensure you're running on Apple Silicon, as MLX is optimized for this architecture
+- Make sure the virtual environment is activated before running any scripts
 
 ## License
 
-ISC
-
-## Acknowledgements
-
-- [Sesame AI Labs](https://huggingface.co/sesame) for the CSM-1B voice model
-- [Model Context Protocol](https://github.com/cursor-io/model-context-protocol) for the MCP specification
-
-## Performance
-
-On Apple Silicon Macs, the Jarvis MCP automatically uses MPS (Metal Performance Shaders) acceleration for voice generation, which provides approximately 2x faster performance compared to CPU-only generation. This results in more responsive voice feedback after task completion.
-
-### Performance Testing
-
-To run performance tests comparing CPU and MPS:
-
-```bash
-# Activate the virtual environment
-source .venv/bin/activate
-
-# Run the simple performance test
-python simple-performance-test.py
-
-# Run the comprehensive performance test
-./test-performance.py
-
-# Test MPS voice generation directly
-./test-mps-jarvis.sh
-```
-
-The performance tests will generate detailed reports comparing CPU and MPS performance for voice generation.
-
-If you experience any issues with MPS acceleration, you can force CPU-only mode by modifying the command in `src/index.ts` to remove the `PYTORCH_ENABLE_MPS_FALLBACK=1` environment variable.
+MIT
